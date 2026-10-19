@@ -1,0 +1,91 @@
+'use client';
+import { useEffect, useState } from 'react';
+import { ArrowUpRight, ArrowRight, Plus, Search, Layers3, Scissors, ShieldCheck, Spool, ClipboardList, LogOut, Check, X, ChevronRight, RefreshCw, AlertTriangle, Clock3, CheckCircle2, LockKeyhole, PackageCheck, BookOpen, ChevronDown, Inbox } from 'lucide-react';
+import { Any, roles, demoPassword, api, Badge, Garment, Brand, formatDate } from './ui';
+import { BatchDetail, CreateOrder } from './production';
+const icons = [Scissors, ShieldCheck, Spool];
+export default function Page() {
+    const [user, setUser] = useState<Any | null>(null), [ready, setReady] = useState(false), [error, setError] = useState(''), [busy, setBusy] = useState(false), [orders, setOrders] = useState<Any[]>([]), [recipes, setRecipes] = useState<Any[]>([]), [view, setView] = useState('workspace'), [selected, setSelected] = useState<Any | null>(null), [creating, setCreating] = useState(false), [query, setQuery] = useState(''), [filter, setFilter] = useState('ALL'), [toast, setToast] = useState(''), [switching, setSwitching] = useState(false), [email, setEmail] = useState(roles[0].email), [password, setPassword] = useState(demoPassword), [selectedRole, setSelectedRole] = useState(roles[0].id);
+    const roleIndex = Math.max(0, roles.findIndex(r => r.id === user?.role)), role = roles[roleIndex], RoleIcon = icons[roleIndex];
+    async function load(u: Any) { const sewing = u.role === 'sewing_supervisor'; const [list, rc] = await Promise.all([sewing ? Promise.all([api('sewing/queue'), api('sewing/active')]).then(([a, b]) => [...a, ...b]) : api('orders'), sewing ? Promise.resolve([]) : api('recipes')]); setOrders(list); setRecipes(rc); }
+    useEffect(() => { api('me').then(async (d) => { setUser(d.user); await load(d.user); }).catch(e => { if (!/sign in|expired/i.test(e.message))
+        setError(e.message); }).finally(() => setReady(true)); }, []);
+    useEffect(() => { if (toast) {
+        const t = setTimeout(() => setToast(''), 4500);
+        return () => clearTimeout(t);
+    } }, [toast]);
+    async function login(e?: React.FormEvent, persona?: typeof roles[number]) { e?.preventDefault(); setBusy(true); setError(''); try {
+        const d = await api('login', { email: persona?.email || email, password: persona ? demoPassword : password });
+        await load(d.user);
+        setUser(d.user);
+        setSelected(null);
+        setView('workspace');
+        setFilter('ALL');
+        setQuery('');
+        setSwitching(false);
+    }
+    catch (e: any) {
+        setError(e.message);
+    }
+    finally {
+        setBusy(false);
+    } }
+    async function refresh() { setBusy(true); setError(''); try {
+        await load(user!);
+        if (selected)
+            setSelected(await api('orders/' + selected.id));
+    }
+    catch (e: any) {
+        setError(e.message);
+    }
+    finally {
+        setBusy(false);
+    } }
+    async function open(o: Any) { setError(''); setBusy(true); try {
+        setSelected(await api('orders/' + o.id));
+    }
+    catch (e: any) {
+        setError(e.message);
+    }
+    finally {
+        setBusy(false);
+    } }
+    async function action(name: string, body: Any = {}, message = 'Batch updated') { if (!selected)
+        return; setBusy(true); setError(''); try {
+        const result = await api(`orders/${selected.id}/${name}`, { revision: selected.revision, ...body });
+        setSelected(result);
+        await load(user!);
+        setToast(message);
+        return result;
+    }
+    catch (e: any) {
+        setError(e.message);
+    }
+    finally {
+        setBusy(false);
+    } }
+    const isCut = roleIndex === 0, isQC = roleIndex === 1, isSew = roleIndex === 2;
+    const filtered = orders.filter(o => (filter === 'ALL' || o.status === filter) && (`${o.order_no} ${o.recipe_name} ${o.fabric_roll_id}`).toLowerCase().includes(query.toLowerCase()));
+    if (!ready)
+        return <div className="loading"><Brand /><span>Opening the production floor…</span></div>;
+    if (!user)
+        return <div className="login-page"><section className="login-story"><Brand /><div className="story-body"><span className="eyebrow mint">FROM CUTTING TABLE TO SEWING FLOOR</span><h1>Every piece counts.<br /><span>Every batch, verified.</span></h1><p>A clear handoff starts with a complete batch. Keep production moving with one trusted quality checkpoint.</p><div className="blueprint"><div className="blueprint-grid"/><Garment /><span className="blueprint-tag tag-one"><CheckCircle2 size={15}/> Front body · verified</span><span className="blueprint-tag tag-two"><CheckCircle2 size={15}/> Sleeves · 2 / garment</span><span className="blueprint-tag tag-three">REC-BL01 / CASUAL BLOUSE</span></div><div className="story-flow"><span><Scissors size={18}/> Cut</span><ChevronRight size={15}/><span><ShieldCheck size={18}/> Verify</span><ChevronRight size={15}/><span><Spool size={18}/> Sew</span></div></div><div className="story-footer"><LockKeyhole size={14}/> Server-enforced permissions. Every decision recorded.</div></section><section className="login-form-area"><div className="login-card"><span className="eyebrow">APPARELFLOW ERP</span><h2>Your production<br />workspace awaits.</h2><p className="muted">Choose a demo persona to explore the complete workflow.</p><div className="role-options">{roles.map((r, i) => { const Icon = icons[i]; return <button type="button" disabled={busy} key={r.id} className={'role-option ' + (selectedRole === r.id ? 'chosen' : '')} onClick={() => { setSelectedRole(r.id); setEmail(r.email); setPassword(demoPassword); }}><span className="role-icon"><Icon size={21}/></span><span><strong>{r.name}</strong><small>{r.description}</small></span><span className="radio">{selectedRole === r.id && <span />}</span></button>; })}</div><form onSubmit={e => login(e)}><label>Email address<input type="email" required value={email} onChange={e => setEmail(e.target.value)}/></label><label>Password<input type="password" required value={password} onChange={e => setPassword(e.target.value)}/></label>{error && <div role="alert" className="error"><AlertTriangle size={17}/>{error}</div>}<button className="primary full" disabled={busy}>{busy ? 'Signing in…' : 'Enter workspace'}<ArrowRight size={17}/></button></form><div className="demo-note"><span className="tiny-dot"/> DEMO ACCESS <span>All personas use <code>{demoPassword}</code></span></div><p className="login-foot">Each persona signs in to a separate, permission-controlled account.</p></div></section></div>;
+    return <div className="app-shell"><aside className="sidebar"><Brand /><div className="workspace-label">WORKSPACE</div><nav><button className={view === 'workspace' ? 'active' : ''} onClick={() => { setView('workspace'); setSelected(null); }}><RoleIcon size={19}/><span>{isQC ? 'Verification terminal' : isSew ? 'Sewing floor' : 'Cutting orders'}</span><span className="nav-count">{orders.filter(o => o.status === (isQC ? 'PENDING_VERIFICATION' : isSew ? 'VERIFIED' : 'CUTTING')).length}</span></button>{!isSew && <button className={view === 'recipes' ? 'active' : ''} onClick={() => { setView('recipes'); setSelected(null); }}><BookOpen size={19}/>Production recipes</button>}<button className={view === 'guide' ? 'active' : ''} onClick={() => { setView('guide'); setSelected(null); }}><Layers3 size={19}/>Workflow guide</button></nav><div className="sidebar-gate"><span className="gate-icon"><ShieldCheck size={22}/></span><strong>Quality is the gate.</strong><p>Only complete, signed-off batches reach the sewing floor.</p><span className="gate-live"><span /> GATEKEEPER ACTIVE</span></div><div className="sidebar-bottom"><div className="avatar">{user.full_name.split(' ').map((s: string) => s[0]).join('')}</div><div><strong>{user.full_name}</strong><small>{role.name}</small></div><button aria-label="Sign out" title="Sign out" onClick={async () => { try {
+        await api('logout', {});
+        setUser(null);
+        setSelected(null);
+    }
+    catch (e: any) {
+        setError(e.message);
+    } }}><LogOut size={17}/></button></div></aside><div className="main-shell"><header className="topbar"><div className="breadcrumb">Production <ChevronRight size={14}/><strong>{role.short}</strong></div><div className="topbar-right"><span className="environment"><span /> LIVE WORKSPACE</span><button className="role-switch" onClick={() => setSwitching(!switching)}><RoleIcon size={16}/>{role.name}<ChevronDown size={14}/></button>{switching && <div className="switch-menu"><span className="eyebrow">SWITCH DEMO ACCOUNT</span>{roles.map((r, i) => { const Icon = icons[i]; return <button key={r.id} disabled={busy} onClick={() => login(undefined, r)}><Icon size={17}/><span>{r.name}</span>{r.id === user.role && <Check size={15}/>}</button>; })}<small>Signs in using the displayed demo credentials.</small></div>}</div></header><main>{error && <div className="error global-error" role="alert"><AlertTriangle size={17}/><span>{error}</span><button onClick={() => setError('')} aria-label="Dismiss error"><X size={17}/></button></div>}{selected ? <BatchDetail key={selected.id + ':' + selected.revision} order={selected} user={user} busy={busy} action={action} onBack={() => { setSelected(null); setError(''); }}/> : view === 'recipes' ? <><div className="page-heading"><div><span className="eyebrow">THE BLUEPRINT FOR EVERY BATCH</span><h1>Production recipes<span className="heading-dot">.</span></h1><p>Component requirements, fabric standards, and quality thresholds.</p></div><span className="count-label">{recipes.length} active recipes</span></div><div className="recipe-grid">{recipes.map(r => <article className="recipe-card" key={r.id}><div className="recipe-art"><span>{r.recipe_code}</span><Garment crop={r.id === 'crop'}/></div><div className="recipe-body"><span className="eyebrow">{r.category}</span><h2>{r.name}</h2><div className="recipe-specs"><span><small>STANDARD FABRIC</small><strong>{r.std_fabric_yards} <em>yds / garment</em></strong></span><span><small>WASTAGE CAP</small><strong>{r.wastage_cap}<em>%</em></strong></span></div><h4>Bill of materials</h4>{r.components.map((c: Any) => <div className="recipe-part" key={c.id}><span>{c.component_name}</span><strong>{c.pieces_per_garment} <small>pcs</small></strong></div>)}{isCut && <button className="secondary full" onClick={() => setCreating(true)}>Create cutting order<ArrowUpRight size={16}/></button>}</div></article>)}</div></> : view === 'guide' ? <WorkflowGuide /> : <><div className="page-heading"><div><span className="eyebrow">{isQC ? 'THE LAST CHECK BEFORE THE NEXT STEP' : isSew ? 'VERIFIED. RELEASED. READY TO ASSEMBLE.' : 'GOOD PRODUCTION STARTS HERE'}</span><h1>{isQC ? 'Verification terminal' : isSew ? 'Sewing floor' : 'Cutting orders'}<span className="heading-dot">.</span></h1><p>{isQC ? 'Check the counts. Catch the shortage. Sign off with confidence.' : isSew ? 'A clear view of complete batches, ready for your assembly line.' : 'Plan, prepare, and move complete batches toward the sewing floor.'}</p></div><div className="heading-actions"><button className="icon-button" aria-label="Refresh batches" onClick={refresh} disabled={busy}><RefreshCw size={18} className={busy ? 'spin' : ''}/></button>{isCut && <button className="primary" onClick={() => setCreating(true)}><Plus size={18}/>New cutting order</button>}</div></div><div className={'metrics ' + (isSew ? 'three' : '')}>{(isSew ? [{ label: 'Ready for assembly', value: orders.filter(o => o.status === 'VERIFIED').length, icon: PackageCheck, color: 'green', note: 'QC approved & released' }, { label: 'In assembly', value: orders.filter(o => o.status === 'SEWING').length, icon: Spool, color: 'blue', note: 'On the sewing floor' }, { label: 'Garments released', value: orders.reduce((a, o) => a + o.target_qty, 0), icon: Layers3, color: 'purple', note: 'Across verified batches' }] : [{ label: 'Total batches', value: orders.length, icon: Layers3, color: 'blue', note: 'All production orders' }, { label: 'Awaiting verification', value: orders.filter(o => o.status === 'PENDING_VERIFICATION').length, icon: Clock3, color: 'amber', note: 'Ready at the QC station' }, { label: 'Verified batches', value: orders.filter(o => ['VERIFIED', 'SEWING'].includes(o.status)).length, icon: ShieldCheck, color: 'green', note: 'Cleared for the sewing floor' }, { label: 'Needs rework', value: orders.filter(o => o.status === 'REJECTED').length, icon: Scissors, color: 'red', note: 'Returned to the cutting floor' }]).map(m => <div key={m.label} className="metric"><div className="metric-top"><span>{m.label}</span><span className={'metric-icon ' + m.color}><m.icon size={18}/></span></div><strong>{String(m.value).padStart(2, '0')}</strong><small>{m.note}</small></div>)}</div><div className="checkpoint-banner"><span className="checkpoint-icon"><ShieldCheck size={25}/></span><div><strong>{isQC ? 'One shortage is one too many.' : isSew ? 'Every batch here has passed the gate.' : 'A complete batch is a productive batch.'}</strong><p>{isQC ? 'Approval stays locked until every component is counted and meets its expected quantity.' : isSew ? 'Verifier signatures and original component counts travel with every released order.' : 'Each component must pass verification before a batch can enter the sewing queue.'}</p></div><span className="banner-chip"><LockKeyhole size={13}/> SERVER ENFORCED</span></div><section className="orders-section"><div className="section-heading"><div><h2>{isQC ? 'Batch inspection queue' : isSew ? 'Assembly batches' : 'Production batches'}<span className="number-chip">{orders.length}</span></h2><p>{isQC ? 'Select a pending batch to begin component verification.' : isSew ? 'Review the quality sign-off before starting assembly.' : 'Track every batch from the first cut to final handoff.'}</p></div></div><div className="table-toolbar"><div className="filter-tabs">{[['ALL', 'All batches'], ...(isSew ? [['VERIFIED', 'Ready'], ['SEWING', 'In assembly']] : [['CUTTING', 'In cutting'], ['PENDING_VERIFICATION', 'Awaiting QC'], ['REJECTED', 'Rework'], ['VERIFIED', 'Verified']])].map(([key, label]) => <button className={filter === key ? 'selected' : ''} key={key} onClick={() => setFilter(key)}>{label}</button>)}</div><label className="search"><Search size={16}/><input aria-label="Search batches" placeholder="Search batches…" value={query} onChange={e => setQuery(e.target.value)}/></label></div><div className="table-scroll"><table><thead><tr><th>BATCH / RECIPE</th><th>QUANTITY</th><th>FABRIC ROLL</th><th>STATUS</th><th>CREATED</th><th /></tr></thead><tbody>{filtered.map(o => <tr key={o.id} onClick={() => open(o)}><td><div className="batch-cell"><div className={'batch-thumbnail ' + (o.recipe_id === 'crop' ? 'crop' : '')}><Garment small crop={o.recipe_id === 'crop'}/></div><div><strong>{o.recipe_name}</strong><small>{o.order_no}</small></div></div></td><td><strong>{o.target_qty}</strong><span className="unit"> garments</span></td><td><span className="roll">{o.fabric_roll_id}</span></td><td><Badge status={o.status}/></td><td className="date-cell">{formatDate(o.created_at)}</td><td><button className="row-link" aria-label={`Open ${o.order_no}`}><ArrowUpRight size={18}/></button></td></tr>)}</tbody></table></div>{!filtered.length && <div className="empty-state"><span className="empty-icon"><Inbox size={28}/></span><h3>{query || filter !== 'ALL' ? 'No matching batches' : isSew ? 'A clear floor, ready for the next batch' : isQC ? 'Your next inspection starts here' : 'Your first batch starts here'}</h3><p>{query || filter !== 'ALL' ? 'Try another search or filter.' : isSew ? 'Approved cutting batches will appear here automatically.' : isQC ? 'Prepared batches appear when Cutting submits them to QC.' : 'Create a cutting order from a production recipe to get started.'}</p>{isCut && filter === 'ALL' && !query && <button className="secondary" onClick={() => setCreating(true)}><Plus size={16}/>Create your first batch</button>}</div>}</section><div className="bottom-note"><ShieldCheck size={14}/><span>Every decision is protected by role permissions and a permanent audit trail.</span><span className="version">APPARELFLOW / 01</span></div></>}</main></div>{creating && <CreateOrder recipes={recipes} busy={busy} onClose={() => setCreating(false)} onCreate={async (body) => { setBusy(true); try {
+        const o = await api('orders', body);
+        await load(user!);
+        setCreating(false);
+        setSelected(o);
+        setToast('Cutting order created. Prepare the batch, then submit it to QC.');
+    }
+    finally {
+        setBusy(false);
+    } }}/>}{toast && <div className="toast" role="status"><CheckCircle2 size={20}/>{toast}</div>}</div>;
+}
+function WorkflowGuide() { return <><div className="page-heading"><div><span className="eyebrow">ONE WORKFLOW. THREE DISTINCT ROLES.</span><h1>From first cut to final handoff<span className="heading-dot">.</span></h1><p>A clear separation of duties keeps every batch accountable.</p></div></div><div className="guide-grid">{roles.map((r, i) => { const Icon = icons[i]; return <article className="panel guide-step" key={r.id}><span className="eyebrow">0{i + 1} / {r.short.toUpperCase()}</span><Icon size={35}/><h2>{r.name}</h2><p>{i === 0 ? 'Create an order from a production recipe. Record the target quantity, fabric roll, and fabric used. Submit the prepared batch to quality control.' : i === 1 ? 'Count every physical component and save the results. Exact counts pass; excess is flagged but allowed. A shortage or missing count blocks approval. Reject with a reason or sign off to release.' : 'View only approved batches. Review verifier identity, component counts, notes, and fabric variance, then start sewing assembly.'}</p><div className="guide-credential"><small>DEMO ACCOUNT</small><code>{r.email}</code></div></article>; })}</div><section className="panel guide-rules"><h2>The gatekeeper contract</h2><p><strong>Green:</strong> exact match. <strong>Yellow:</strong> excess, recorded and allowed. <strong>Red:</strong> shortage, approval blocked.</p><p>Saved counts and permissions are checked on the server. Approved counts and verification logs are permanent. Concurrent updates require a refresh before another decision.</p><p>All demo accounts use <code>{demoPassword}</code>. Use the account switcher to test each role.</p></section></>; }
