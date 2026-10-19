@@ -2,7 +2,7 @@ import { test,before } from 'node:test';
 import assert from 'node:assert/strict';
 const base=process.env.TEST_BASE_URL||'http://localhost:5173';
 const cookies={};
-async function request(path,role,body,extra={}){const r=await fetch(base+'/api/'+path,{method:body!==undefined?'POST':'GET',headers:{...(body!==undefined?{'Content-Type':'application/json'}:{}),...(role?{cookie:cookies[role]}:{}),...extra},body:body!==undefined?JSON.stringify(body):undefined});return {status:r.status,data:await r.json(),response:r};}
+async function request(path,role,body,extra={}){const r=await fetch(base+'/api/'+path,{method:body!==undefined?'POST':'GET',headers:{...(body!==undefined?{'Content-Type':'application/json'}:{}),...(role?{cookie:cookies[role]}:{}),...extra},body:body!==undefined?JSON.stringify(body):undefined});const raw=await r.text();const data=r.headers.get('content-type')?.includes('application/json')?JSON.parse(raw):{error:raw};return {status:r.status,data,response:r};}
 before(async()=>{for(const [role,email] of [['cut','cutting@apparelflow.demo'],['qc','verifier@apparelflow.demo'],['sew','sewing@apparelflow.demo']]){const r=await request('login',null,{email,password:'ApparelFlow!2026'});assert.equal(r.status,200,JSON.stringify(r.data));cookies[role]=r.response.headers.get('set-cookie').split(';')[0];assert.match(r.response.headers.get('set-cookie'),/HttpOnly/);}});
 async function create(){const r=await request('orders','cut',{recipe_id:'blouse',target_qty:50,fabric_roll_id:'HTTP-AUDIT-'+Date.now(),actual_fabric_yds:95});assert.equal(r.status,200,JSON.stringify(r.data));return r.data;}
 async function pending(){const o=await create();const r=await request(`orders/${o.id}/submit`,'cut',{revision:o.revision});assert.equal(r.status,200);return r.data;}
