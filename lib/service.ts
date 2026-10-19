@@ -1,3 +1,4 @@
+import { ensureCatalog } from './catalog.ts';
 import { AppError, requireRole, integer, text, flag, assertApproval, wastage } from './domain.ts';
 import { passwordHash } from './auth.ts';
 type User = {
@@ -9,6 +10,7 @@ type User = {
 export async function seed(db: D1Database) {
     // Seed records, never schema. INSERT OR IGNORE makes simultaneous first visits safe.
     const now = new Date().toISOString();
+    await ensureCatalog(db);
     const accounts = [['u-cut', 'cutting@apparelflow.demo', 'cutting_supervisor', 'Nimal Perera'], ['u-qc', 'verifier@apparelflow.demo', 'cutting_verifier', 'Amaya Silva'], ['u-sew', 'sewing@apparelflow.demo', 'sewing_supervisor', 'Ravi Fernando']];
     const exists = await db.prepare('SELECT id FROM users LIMIT 1').first();
     if (exists)
@@ -19,15 +21,9 @@ export async function seed(db: D1Database) {
         const hash = await passwordHash('ApparelFlow!2026', salt);
         statements.push(db.prepare('INSERT OR IGNORE INTO users (id,email,password_hash,role,full_name,created_at) VALUES (?,?,?,?,?,?)').bind(id, email, `${salt}:${hash}`, role, name, now));
     }
-    const recipes = [['blouse', 'REC-BL01', 'Casual Blouse', 'Blouse', 1.8, 5], ['crop', 'REC-CT02', 'Crop Top', 'Crop Top', 1.1, 8]];
-    for (const r of recipes)
-        statements.push(db.prepare('INSERT OR IGNORE INTO recipes VALUES (?,?,?,?,?,?)').bind(...r));
-    for (const [recipe, parts] of [['blouse', [['Front Body Panel', 1], ['Back Body Panel', 1], ['Sleeves (Left & Right)', 2], ['Collar & Stand', 1], ['Sleeve Cuffs', 2]]], ['crop', [['Front Chest Panel', 1], ['Back Support Panel', 1], ['Neck Binding Strip', 1], ['Hem Elastic Casing', 1], ['Side Strap Accents', 2]]]] as const)
-        for (let i = 0; i < parts.length; i++)
-            statements.push(db.prepare('INSERT OR IGNORE INTO recipe_components (id,recipe_id,component_name,pieces_per_garment) VALUES (?,?,?,?)').bind(`${recipe}-${i}`, recipe, ...parts[i]));
     await db.batch(statements);
 }
-export async function listRecipes(db: D1Database) { const recipes = (await db.prepare('SELECT * FROM recipes ORDER BY recipe_code').all()).results; const components = (await db.prepare('SELECT * FROM recipe_components ORDER BY id').all()).results; return recipes.map((r: any) => ({ ...r, components: components.filter((c: any) => c.recipe_id === r.id) })); }
+export async function listRecipes(db: D1Database) { await ensureCatalog(db); const recipes = (await db.prepare('SELECT * FROM recipes ORDER BY recipe_code').all()).results; const components = (await db.prepare('SELECT * FROM recipe_components ORDER BY id').all()).results; return recipes.map((r: any) => ({ ...r, components: components.filter((c: any) => c.recipe_id === r.id) })); }
 export async function listOrders(db: D1Database, user: User, sewing = false) {
     if (sewing)
         requireRole(user, 'sewing_supervisor');
@@ -113,4 +109,11 @@ export async function act(db: D1Database, user: User, id: string, action: string
     if (!results[0].meta.changes)
         throw new AppError(409, 'Another request changed this batch. Refresh and retry.');
     return detail(db, user, id);
+}
+
+export async function qualityReport(db:D1Database,user:User){
+ requireRole(user,'cutting_supervisor','cutting_verifier');
+ const summary=await db.prepare("SELECT COUNT(*) AS total,COALESCE(SUM(CASE WHEN decision='APPROVED' THEN 1 ELSE 0 END),0) AS approved,COALESCE(SUM(CASE WHEN decision='REJECTED' THEN 1 ELSE 0 END),0) AS rejected,ROUND(AVG(CASE WHEN decision='APPROVED' THEN wastage_pct END),2) AS avg_wastage FROM verification_logs").first();
+ const logs=(await db.prepare('SELECT l.id,l.order_id,l.decision,l.rejection_note,l.wastage_pct,l.timestamp,u.full_name AS verifier_name,o.order_no,r.name AS recipe_name FROM verification_logs l JOIN users u ON u.id=l.verifier_id JOIN cutting_orders o ON o.id=l.order_id JOIN recipes r ON r.id=o.recipe_id ORDER BY l.timestamp DESC LIMIT 200').all()).results;
+ return {summary,logs};
 }

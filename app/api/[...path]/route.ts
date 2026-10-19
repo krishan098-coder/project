@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:workers';
 import { AppError, text } from '../../../lib/domain';
 import { authenticate, checkOrigin, cookie, digest, passwordHash } from '../../../lib/auth';
-import { seed, listRecipes, listOrders, detail, createOrder, act } from '../../../lib/service';
+import { seed, listRecipes, listOrders, detail, createOrder, act, qualityReport } from '../../../lib/service';
 export const dynamic = 'force-dynamic';
 async function bodyObject(request: Request): Promise<Record<string, any>> { const value = await request.json(); if (!value || typeof value !== 'object' || Array.isArray(value))
     throw new AppError(422, 'A JSON object is required.'); return value as Record<string, any>; }
@@ -44,7 +44,8 @@ async function handle(request: Request) {
             return Response.json({ ok: true }, { headers: { 'Set-Cookie': cookie(request, '', 0) } });
         }
         let result: any;
-        if (path[0] === 'me' && method === 'GET')
+        if(path[0]==='reports' && path.length===1 && method==='GET') result=await qualityReport(db,user);
+        else if (path[0] === 'me' && method === 'GET')
             result = { user };
         else if (path[0] === 'recipes' && method === 'GET') {
             if (user.role === 'sewing_supervisor')

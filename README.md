@@ -12,7 +12,7 @@ Password for all three: `ApparelFlow!2026`.
 | Cutting Verifier | verifier@apparelflow.demo | Save counts, approve, reject with reason |
 | Sewing Supervisor | sewing@apparelflow.demo | See verified/assembly batches, start assembly |
 
-The login page exposes these demo personas. The account switcher performs real server sign-in; it does not change a client-side permission flag. Demo users and the two recipes seed on first login, after schema migrations.
+The login page exposes these demo personas. The account switcher performs real server sign-in; it does not change a client-side permission flag. Demo users and the eight recipes seed on first login, after schema migrations.
 
 ## Run locally
 
@@ -97,3 +97,12 @@ Missing/expired session: 401. Wrong role: 403. Hidden/nonexistent batch: 404. Wr
 `.openai/hosting.json` declares the persistent `DB` binding. Sites provisions hosted D1 and applies migrations during publication. The provided build is for Cloudflare Workers; it cannot be uploaded as a static-only site. A conventional Vercel/PostgreSQL deployment would require replacing the D1 adapter.
 
 The source includes everything needed for review. Before submitting, ensure the live URL is publicly accessible to your evaluator and create the required public GitHub repository with your own account. See `AI_OPTIMIZATION_REPORT.md` for an honest account of AI assistance and limitations. Do not claim personal refactoring or tests you have not reviewed or run.
+
+## Workspace pages
+
+- **Home:** role-specific production overview, next batches, and quick actions. This is the default page after sign-in.
+- **Product collection:** eight searchable/filterable styles, illustrated product cards, and complete recipe details. Includes Casual Blouse, Crop Top, Essential T-Shirt, Signature Polo, Oxford Shirt, Everyday Hoodie, Tailored Trousers, and Track Jacket.
+- **Batch tracking:** live production stage boards with searchable batch cards; Sewing sees only verified and active assembly batches.
+- **Quality reports:** server-aggregated verification decisions, average approved fabric variance, immutable decision ledger, and CSV export of the latest 200 decisions. Available to Cutting and Verification roles only; GET /api/reports enforces this permission.
+
+New built-in catalogue entries seed idempotently for both new and existing installations. Existing user credentials, recipes, batches, and audit records are retained.

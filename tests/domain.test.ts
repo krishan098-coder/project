@@ -2,7 +2,7 @@ import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, readdirSync } from 'node:fs';
-import { act, seed, createOrder, listOrders, detail } from '../lib/service.ts';
+import { act, seed, createOrder, listOrders, detail, listRecipes, qualityReport } from '../lib/service.ts';
 import { integer, wastage } from '../lib/domain.ts';
 import { authenticate, digest, checkOrigin } from '../lib/auth.ts';
 // Execute the production service and production SQL against a real SQLite DB.
@@ -57,3 +57,7 @@ test('assembly can start only once; verified queue remains strict', async () => 
 test('authentication requires an unexpired server session', async () => { await assert.rejects(authenticate(db, new Request('https://test/')), (e: any) => e.status === 401); await db.prepare('INSERT INTO sessions VALUES (?,?,?)').bind(await digest('old'), qc.id, 0).run(); await assert.rejects(authenticate(db, new Request('https://test/', { headers: { cookie: 'af_session=old' } })), (e: any) => e.status === 401); });
 test('cross-origin writes fail; same origin is allowed', () => { assert.throws(() => checkOrigin(new Request('https://test/api', { headers: { origin: 'https://evil.test' } })), (e: any) => e.status === 403); checkOrigin(new Request('https://test/api', { headers: { origin: 'https://test' } })); });
 test('fabric variance formula handles fractional standards and negative variance', () => { assert.equal(wastage(95, 1.8, 50), 5.56); assert.equal(wastage(10, 1.1, 10), -9.09); });
+
+test('expanded catalogue has eight complete recipes and reseeding preserves users',async()=>{const before=await db.prepare("SELECT password_hash FROM users WHERE id='u-cut'").first<any>();await seed(db);const recipes=await listRecipes(db);assert.equal(recipes.length,8);assert(recipes.every((r:any)=>r.components.length>=4));assert.equal((await db.prepare("SELECT password_hash FROM users WHERE id='u-cut'").first<any>()).password_hash,before.password_hash);});
+test('new hoodie recipe multiplies component requirements correctly',async()=>{const o=await createOrder(db,cut,{recipe_id:'hoodie',target_qty:10,actual_fabric_yds:30,fabric_roll_id:'HOOD-ROLL'});assert.equal(o.items.length,7);assert.equal(o.items.find((i:any)=>i.component_name==='Long Sleeves').expected_qty,20);assert.equal(o.items.find((i:any)=>i.component_name==='Hood Panels').expected_qty,20);});
+test('quality report aggregates saved decisions and excludes sewing access',async()=>{let o=await counted();await act(db,qc,o.id,'approve',{revision:o.revision});o=await pending();await act(db,qc,o.id,'reject',{revision:o.revision,note:'Defective fabric'});const report=await qualityReport(db,qc);assert.equal((report.summary as any).total,2);assert.equal((report.summary as any).approved,1);assert.equal((report.summary as any).rejected,1);assert.equal(report.logs.length,2);await assert.rejects(qualityReport(db,sew),(e:any)=>e.status===403);});

@@ -2,13 +2,14 @@
 import { useState } from 'react';
 import { ArrowLeft, ArrowRight, ArrowUpRight, Check, X, Plus, Circle, LockKeyhole, ShieldCheck, Scissors, AlertTriangle, History, Spool } from 'lucide-react';
 import { Any, Badge, Garment, whole, formatDate } from './ui';
-export function CreateOrder({ recipes, busy, onClose, onCreate }: {
+export function CreateOrder({ recipes, busy, onClose, onCreate, initialRecipeId }: {
+    initialRecipeId?: string;
     recipes: Any[];
     busy: boolean;
     onClose: () => void;
     onCreate: (body: Any) => Promise<void>;
 }) {
-    const [rid, setRid] = useState(recipes[0]?.id || ''), [qty, setQty] = useState('50'), [fabric, setFabric] = useState(''), [roll, setRoll] = useState(''), [error, setError] = useState(''), [touched, setTouched] = useState(false);
+    const [rid, setRid] = useState(initialRecipeId || recipes[0]?.id || ''), [qty, setQty] = useState('50'), [fabric, setFabric] = useState(''), [roll, setRoll] = useState(''), [error, setError] = useState(''), [touched, setTouched] = useState(false);
     const r = recipes.find(r => r.id === rid);
     const valid = whole(qty, 1) && Number(qty) <= 500000 && whole(fabric, 1) && !!roll.trim() && roll.length <= 100;
     return <div className="modal-backdrop"><section className="modal" role="dialog" aria-modal="true" aria-labelledby="create-title"><div className="modal-head"><div><span className="eyebrow">CUTTING FLOOR</span><h2 id="create-title">New cutting order</h2><p>Turn a production recipe into a ready-to-cut batch.</p></div><button aria-label="Close" className="icon-button" onClick={onClose}><X size={20}/></button></div><form onSubmit={async (e) => { e.preventDefault(); setTouched(true); if (!valid)
