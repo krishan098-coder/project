@@ -1,0 +1,15 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "apparelflow-production-gate",
+  "account_id": "621a9a65183e15ce018d8d48f201595a",
+  "main": "./build/sites-worker.ts",
+  "compatibility_date": "2026-05-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "apparelflow-db",
+    "database_id": "df099c64-cb24-447a-8d21-6012146f7d58",
+    "migrations_dir": "drizzle"
+  }]
+}
