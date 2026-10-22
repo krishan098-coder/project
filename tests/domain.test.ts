@@ -1,4 +1,5 @@
 import { test, beforeEach } from 'node:test';
+import {inventory,addRoll,moveStock,plans,addPlan,updatePlan} from '../lib/operations.ts';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -61,3 +62,39 @@ test('fabric variance formula handles fractional standards and negative variance
 test('expanded catalogue has eight complete recipes and reseeding preserves users',async()=>{const before=await db.prepare("SELECT password_hash FROM users WHERE id='u-cut'").first<any>();await seed(db);const recipes=await listRecipes(db);assert.equal(recipes.length,8);assert(recipes.every((r:any)=>r.components.length>=4));assert.equal((await db.prepare("SELECT password_hash FROM users WHERE id='u-cut'").first<any>()).password_hash,before.password_hash);});
 test('new hoodie recipe multiplies component requirements correctly',async()=>{const o=await createOrder(db,cut,{recipe_id:'hoodie',target_qty:10,actual_fabric_yds:30,fabric_roll_id:'HOOD-ROLL'});assert.equal(o.items.length,7);assert.equal(o.items.find((i:any)=>i.component_name==='Long Sleeves').expected_qty,20);assert.equal(o.items.find((i:any)=>i.component_name==='Hood Panels').expected_qty,20);});
 test('quality report aggregates saved decisions and excludes sewing access',async()=>{let o=await counted();await act(db,qc,o.id,'approve',{revision:o.revision});o=await pending();await act(db,qc,o.id,'reject',{revision:o.revision,note:'Defective fabric'});const report=await qualityReport(db,qc);assert.equal((report.summary as any).total,2);assert.equal((report.summary as any).approved,1);assert.equal((report.summary as any).rejected,1);assert.equal(report.logs.length,2);await assert.rejects(qualityReport(db,sew),(e:any)=>e.status===403);});
+
+test('fabric receipts and issues preserve balances and immutable actor history',async()=>{
+ let s=await addRoll(db,cut,{roll_code:'STOCK-1',material:'Cotton',color:'Blue',supplier:'Mill',quantity:100,reorder_yds:30});
+ const r=s.rolls[0] as any; assert.equal(r.available_yds,100);
+ s=await moveStock(db,cut,r.id,{kind:'ISSUE',quantity:80,note:'Cutting batch',revision:0,actor_id:qc.id});
+ assert.equal((s.rolls[0] as any).available_yds,20);assert(s.movements.every((m:any)=>m.actor_id===cut.id));
+ s=await moveStock(db,cut,r.id,{kind:'RECEIPT',quantity:50,note:'Delivery',revision:1});assert.equal((s.rolls[0] as any).available_yds,70);
+ assert.throws(()=>local.sqlite.prepare('UPDATE fabric_movements SET quantity=1').run());assert.throws(()=>local.sqlite.prepare('DELETE FROM fabric_movements').run());
+});
+test('stock cannot overspend and stale requests cannot create a movement',async()=>{
+ const s=await addRoll(db,cut,{roll_code:'STOCK-2',material:'Cotton',color:'Blue',supplier:'Mill',quantity:10,reorder_yds:5});const r=s.rolls[0] as any;
+ await assert.rejects(moveStock(db,cut,r.id,{kind:'ISSUE',quantity:11,note:'Too much',revision:0}),(e:any)=>e.status===422);
+ await moveStock(db,cut,r.id,{kind:'ISSUE',quantity:7,note:'Batch',revision:0});
+ await assert.rejects(moveStock(db,cut,r.id,{kind:'ISSUE',quantity:7,note:'Stale',revision:0}),(e:any)=>e.status===409);
+ const after=await inventory(db,cut);assert.equal((after.rolls[0] as any).available_yds,3);assert.equal(after.movements.length,2);
+ assert.throws(()=>local.sqlite.prepare('UPDATE fabric_rolls SET available_yds=-1').run());
+});
+test('inventory and planning enforce reader and writer separation',async()=>{
+ await assert.rejects(inventory(db,sew),(e:any)=>e.status===403);await assert.rejects(plans(db,sew),(e:any)=>e.status===403);
+ await assert.rejects(addRoll(db,qc,{}),(e:any)=>e.status===403);await assert.rejects(addPlan(db,qc,{}),(e:any)=>e.status===403);
+ assert.equal((await inventory(db,qc)).rolls.length,0);
+});
+test('planning validates dates and recipe and never creates or releases a batch',async()=>{
+ const b={recipe_id:'blouse',target_qty:50,due_date:'2027-01-30',priority:'HIGH',note:'Prepare trims'};
+ for(const invalid of [{...b,due_date:'2027-02-30'},{...b,recipe_id:'missing'},{...b,target_qty:0},{...b,priority:'BYPASS'}])await assert.rejects(addPlan(db,cut,invalid),(e:any)=>e.status===422);
+ let p=await addPlan(db,cut,b);assert.equal(p.length,1);assert.equal(p[0].status,'PLANNED');
+ p=await updatePlan(db,cut,String(p[0].id),{revision:0,status:'SCHEDULED'});assert.equal(p[0].status,'SCHEDULED');
+ await assert.rejects(updatePlan(db,cut,String(p[0].id),{revision:0,status:'CANCELLED'}),(e:any)=>e.status===409);
+ await assert.rejects(updatePlan(db,cut,String(p[0].id),{revision:1,status:'VERIFIED'}),(e:any)=>e.status===422);
+ assert.equal((await listOrders(db,cut)).length,0);assert.equal((await listOrders(db,sew,true)).length,0);
+});
+test('stock rejects decimal and string quantities and duplicate roll codes',async()=>{
+ const b={roll_code:'UNIQUE',material:'Cotton',color:'Blue',supplier:'Mill',quantity:10,reorder_yds:5};
+ for(const quantity of [-1,1.2,'10',null])await assert.rejects(addRoll(db,cut,{...b,quantity}),(e:any)=>e.status===422);
+ await addRoll(db,cut,b);await assert.rejects(addRoll(db,cut,b),(e:any)=>e.status===409);
+});

@@ -106,3 +106,15 @@ The source includes everything needed for review. Before submitting, ensure the 
 - **Quality reports:** server-aggregated verification decisions, average approved fabric variance, immutable decision ledger, and CSV export of the latest 200 decisions. Available to Cutting and Verification roles only; GET /api/reports enforces this permission.
 
 New built-in catalogue entries seed idempotently for both new and existing installations. Existing user credentials, recipes, batches, and audit records are retained.
+
+## Inventory, planning, and production insights
+
+- Fabric inventory records opening stock, receipts and usage in whole yards. Atomic updates prevent negative balances and stale edits; movement history is immutable and records the signed-in user.
+- Stock movements are recorded explicitly. Creating a cutting order does not automatically deduct stock; reference the batch in the stock issue note.
+- Production planning saves recipe targets, due dates, priorities and notes. Plans can be scheduled, cancelled and restored; they never approve or release a batch. The cutting-order shortcut preselects the recipe.
+- Alerts show stock at or below its reorder level and active plans due today or earlier, using the Sri Lanka calendar date.
+- Home includes production-stage bars, the current proportion of released batches, and garment mix from the signed-in role's visible batches.
+- Cutting Supervisors manage inventory/plans; Cutting Verifiers can read them; Sewing is blocked from both APIs and pages.
+
+Public demo: https://apparelflow-production-gate.krishanking098.workers.dev
+Direct deployment instructions: CLOUDFLARE_DEPLOYMENT.md.

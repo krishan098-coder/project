@@ -1,4 +1,5 @@
 import { env } from 'cloudflare:workers';
+import {inventory,addRoll,moveStock,plans,addPlan,updatePlan} from '../../../lib/operations';
 import { AppError, text } from '../../../lib/domain';
 import { authenticate, checkOrigin, cookie, digest, passwordHash } from '../../../lib/auth';
 import { seed, listRecipes, listOrders, detail, createOrder, act, qualityReport } from '../../../lib/service';
@@ -44,7 +45,13 @@ async function handle(request: Request) {
             return Response.json({ ok: true }, { headers: { 'Set-Cookie': cookie(request, '', 0) } });
         }
         let result: any;
-        if(path[0]==='reports' && path.length===1 && method==='GET') result=await qualityReport(db,user);
+        if(path[0]==='inventory' && path.length===1 && method==='GET') result=await inventory(db,user);
+        else if(path[0]==='inventory' && path.length===1 && method==='POST') result=await addRoll(db,user,await bodyObject(request));
+        else if(path[0]==='inventory' && path.length===2 && method==='POST') result=await moveStock(db,user,path[1],await bodyObject(request));
+        else if(path[0]==='plans' && path.length===1 && method==='GET') result=await plans(db,user);
+        else if(path[0]==='plans' && path.length===1 && method==='POST') result=await addPlan(db,user,await bodyObject(request));
+        else if(path[0]==='plans' && path.length===2 && method==='POST') result=await updatePlan(db,user,path[1],await bodyObject(request));
+        else if(path[0]==='reports' && path.length===1 && method==='GET') result=await qualityReport(db,user);
         else if (path[0] === 'me' && method === 'GET')
             result = { user };
         else if (path[0] === 'recipes' && method === 'GET') {

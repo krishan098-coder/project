@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import "./polish.css";
 import "./workspace-pages.css";
+import "./operations.css";
 
 export const metadata: Metadata = {
   title: "ApparelFlow — Production Gate",

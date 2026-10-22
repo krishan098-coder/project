@@ -17,3 +17,22 @@ test('HTTP invalid values, null payloads, and cross-origin writes fail cleanly',
 test('HTTP concurrent count update makes old approval revision return 409',async()=>{const old=await pending();await count(old);assert.equal((await request(`orders/${old.id}/approve`,'qc',{revision:old.revision})).status,409);});
 
 test('HTTP expanded catalogue and role-protected quality reports',async()=>{const catalog=await request('recipes','cut');assert.equal(catalog.status,200);assert.equal(catalog.data.length,8);assert(catalog.data.some(r=>r.name==='Everyday Hoodie'&&r.components.length===7));const report=await request('reports','qc');assert.equal(report.status,200);assert(report.data.summary.total>=2);assert(Array.isArray(report.data.logs));assert.equal((await request('reports','sew')).status,403);assert.equal((await request('reports')).status,401);});
+
+test('HTTP stock and planning endpoints preserve role boundaries and recorded values',async()=>{
+ for(const path of ['inventory','plans']){
+  assert.equal((await request(path)).status,401);
+  assert.equal((await request(path,'sew')).status,403);
+  assert.equal((await request(path,'qc',{})).status,403);
+ }
+ const code='DEMO-STOCK-'+Date.now();
+ let r=await request('inventory','cut',{roll_code:code,material:'Cotton twill',color:'Ocean blue',supplier:'Assessment sample mill',quantity:100,reorder_yds:30});assert.equal(r.status,200,JSON.stringify(r.data));
+ let roll=r.data.rolls.find(x=>x.roll_code===code);assert.equal(roll.available_yds,100);
+ r=await request('inventory/'+roll.id,'cut',{kind:'ISSUE',quantity:101,note:'Overspend check',revision:0});assert.equal(r.status,422);
+ r=await request('inventory/'+roll.id,'cut',{kind:'ISSUE',quantity:80,note:'Demo cutting allocation',revision:0});assert.equal(r.status,200,JSON.stringify(r.data));assert.equal(r.data.rolls.find(x=>x.id===roll.id).available_yds,20);
+ r=await request('inventory/'+roll.id,'cut',{kind:'RECEIPT',quantity:20,note:'Stale check',revision:0});assert.equal(r.status,409);
+ r=await request('plans','cut',{recipe_id:'hoodie',target_qty:40,due_date:'2027-01-30',priority:'HIGH',note:'Assessment demo: prepare trims'});assert.equal(r.status,200,JSON.stringify(r.data));
+ const plan=r.data.find(x=>x.recipe_id==='hoodie'&&x.note==='Assessment demo: prepare trims');assert(plan);
+ r=await request('plans/'+plan.id,'cut',{revision:plan.revision,status:'SCHEDULED'});assert.equal(r.status,200);
+ assert.equal((await request('plans/'+plan.id,'cut',{revision:plan.revision,status:'VERIFIED'})).status,422);
+ assert.equal((await request('plans','qc')).status,200);
+});
